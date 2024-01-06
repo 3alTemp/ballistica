@@ -191,6 +191,38 @@ class PartyWindow(bui.Window):
             1.0, bui.WeakCall(self._update), repeat=True
         )
         self._update()
+        
+        self.msg_length_max: int = 99
+        self.msg_length_limit: bool = True
+        self.msg_length_limit_force: bool = False
+        
+        self.msg_length_text = bui.textwidget(
+            parent=self._root_widget,
+            size=(60, 40),
+            position=(385, 66),
+            text='0/0',
+            maxwidth=473,
+            shadow=0.5,
+            flatness=0.3,
+            v_align='center',
+            h_align='right',
+            corner_scale=0.4,
+            color=(1,1,1,0.7),
+        )
+        
+        # If forced, the message box itself will
+        # only allow as many characters as specified.
+        # Could be a hassle for mobile players though.
+        if self.msg_length_limit_force:
+            bui.textwidget(
+                edit=self._text_field,
+                max_chars=self.msg_length_max
+            )
+        
+        self.msg_update_timer = bui.AppTimer(
+            0.05, bui.WeakCall(self._update_msg_info), repeat=True
+        )
+        self._update_msg_info()
 
     def on_chat_message(self, msg: str) -> None:
         """Called when a new chat message comes through."""
@@ -451,6 +483,15 @@ class PartyWindow(bui.Window):
                     position=(30, 80),
                 )
 
+    def _update_msg_info(self) -> None:
+        """Updates the text displayed by our text length widget."""
+        text_length = len(bui.textwidget(query=self._text_field))
+        bui.textwidget(
+            edit=self.msg_length_text,
+            text=f'{text_length}/{self.msg_length_max}',
+        )
+                      
+
     def popup_menu_selected_choice(
         self, popup_window: PopupMenuWindow, choice: str
     ) -> None:
@@ -586,8 +627,29 @@ class PartyWindow(bui.Window):
         self._popup_party_member_is_host = is_host
 
     def _send_chat_message(self) -> None:
+        """Sends the message stored in our text field."""
+        text = bui.textwidget(query=self._text_field)
+
+        def reject_message(reason: bui.Lstr | str) -> None:
+            """ Shows a message on-screen and plays an error sound. """
+            bui.screenmessage(
+                reason,
+                color=(1,0,0)
+                )
+            bui.getsound('error').play()
+            
+        # Prevent big messages from being sent, or else
+        # they'll end up getting butchered by servers anyway.
+        if len(text) > self.msg_length_max and self.msg_length_limit:
+            reject_message(
+                reason = bui.Lstr(translate=('serverResponses', 'Message is too long.'))
+            )
+            return
+
+        # Send our message if we haven't stumbled into an exception.
         bs.chatmessage(cast(str, bui.textwidget(query=self._text_field)))
         bui.textwidget(edit=self._text_field, text='')
+        self._update_msg_info()
 
     def close(self) -> None:
         """Close the window."""
